@@ -63,6 +63,12 @@ class Runner {
     }
 
 
+struct Resp:Encodable{
+   var file: String
+   var error: String
+   var obs: [String] = []
+}
+
 static func run(files: [String]) -> Int32 {
 
 
@@ -73,34 +79,39 @@ static func run(files: [String]) -> Int32 {
     //guard let langs = VNRecognizeTextRequest.supportedRecognitionLanguages(for: .accurate, revision: REVISION)
     // --fast (default accurate)
     // --fix (default no language correction)
-    let urls = files.map {
-        URL(fileURLWithPath: $0)
-    }
-
-    for url in urls {
-
+    while let file = readLine(){
+        let url = URL(fileURLWithPath: file)
         let img = NSImage(byReferencing: url)
-
-
-
-    let desc = img.debugDescription
         guard let imgRef = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            fputs("Error: failed to convert NSImage to CGImage for '\(url)'\n", stderr)
-            return 1
+            let resp = Resp(file: file, error:"Error: failed to convert NSImage to CGImage")
+            let encoder = JSONEncoder()
+            guard let encodedData = try? encoder.encode(resp), 
+            let jsonText = String(data: encodedData, encoding: .utf8) else {
+                fatalError("`JSON Encode Failed`")
+            }
+            print(jsonText)
+            fflush(stdout)
+            continue
         }
 
         let request = VNRecognizeTextRequest { (request, error) in
             let observations = request.results as? [VNRecognizedTextObservation] ?? []
             let obs : [String] = observations.map { $0.topCandidates(1).first?.string ?? ""}
-            try? obs.joined(separator: "\n").write(to: url.appendingPathExtension("md"), atomically: true, encoding: String.Encoding.utf8)
-
-            fputs("got page obs is \(obs)", stderr)
+            // try? obs.joined(separator: "\n").write(to: url.appendingPathExtension("md"), atomically: true, encoding: String.Encoding.utf8)
+            let resp = Resp(file: file, error:"", obs:obs)
+            let encoder = JSONEncoder()
+            guard let encodedData = try? encoder.encode(resp), 
+            let jsonText = String(data: encodedData, encoding: .utf8) else {
+                fatalError("`JSON Encode Failed`")
+            }
+            print(jsonText)
+            fflush(stdout)
         }
         request.recognitionLevel = VNRequestTextRecognitionLevel.accurate // or .fast
         request.usesLanguageCorrection = true
         request.revision = VNRecognizeTextRequestRevision2
-        request.recognitionLanguages = ["de"]
-        request.customWords = ["der", "Der", "Name"]
+        request.recognitionLanguages = ["zh", "en"]
+        request.customWords = []
 
         try? VNImageRequestHandler(cgImage: imgRef, options: [:]).perform([request])
     }
